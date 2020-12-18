@@ -224,6 +224,7 @@ static set<string> hostnames_s3website_set;
 
 void rgw_rest_init(CephContext *cct, RGWRados *store, RGWZoneGroup& zone_group)
 {
+  // 初始化rgw实例id
   store->init_host_id();
 
   for (const auto& rgw2http : base_rgw_to_http_attrs)  {
@@ -237,6 +238,7 @@ void rgw_rest_init(CephContext *cct, RGWRados *store, RGWZoneGroup& zone_group)
   list<string> extended_http_attrs;
   get_str_list(cct->_conf->rgw_extended_http_attrs, extended_http_attrs);
 
+  // 处理外部定义的http 头部参数
   list<string>::iterator iter;
   for (iter = extended_http_attrs.begin(); iter != extended_http_attrs.end(); ++iter) {
     string rgw_attr = RGW_ATTR_PREFIX;
@@ -250,10 +252,12 @@ void rgw_rest_init(CephContext *cct, RGWRados *store, RGWZoneGroup& zone_group)
     generic_attrs_map[http_header] = rgw_attr;
   }
 
+  // 注册状态码
   for (const struct rgw_http_status_code *h = http_codes; h->code; h++) {
     http_status_names[h->code] = h->name;
   }
 
+  // 初始化域名
   hostnames_set.insert(cct->_conf->rgw_dns_name);
   hostnames_set.insert(zone_group.hostnames.begin(), zone_group.hostnames.end());
   hostnames_set.erase(""); // filter out empty hostnames
@@ -1937,6 +1941,7 @@ int RGWHandler_REST::read_permissions(RGWOp* op_obj)
   return do_read_permissions(op_obj, only_bucket);
 }
 
+// 注册特定路径下的处理器
 void RGWRESTMgr::register_resource(string resource, RGWRESTMgr *mgr)
 {
   string r = "/";

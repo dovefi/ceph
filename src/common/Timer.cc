@@ -21,7 +21,9 @@
 #define dout_prefix *_dout << "timer(" << this << ")."
 
 
-
+/*
+ * 定时器线程用于执行定时器任务，具体的任务处理方法由 SafeTimer类的timer_thread()定义
+ * */
 class SafeTimerThread : public Thread {
   SafeTimer *parent;
 public:

@@ -3818,6 +3818,7 @@ int RGWRados::init_rados()
   int ret = 0;
   auto admin_socket = cct->get_admin_socket();
   for (auto cmd : admin_commands) {
+    // 注册cache管理命令，hook，hook触发会回调 this.call() 方法
     int r = admin_socket->register_command(cmd[0], cmd[1], this,
                                            cmd[2]);
     if (r < 0) {
@@ -3827,6 +3828,7 @@ int RGWRados::init_rados()
     }
   }
 
+  // 初始化librados实例，根据配置项来决定rados实例的个数
   auto handles = std::vector<librados::Rados>{cct->_conf->rgw_num_rados_handles};
 
   for (auto& r : handles) {
@@ -3840,6 +3842,8 @@ int RGWRados::init_rados()
     }
   }
 
+  // 初始化同步模块，参考文档，multisite需要用到
+  // https://docs.ceph.com/en/latest/radosgw/sync-modules/
   sync_modules_manager = new RGWSyncModulesManager();
 
   rgw_register_sync_modules(sync_modules_manager);
@@ -3855,6 +3859,7 @@ int RGWRados::init_rados()
   data_log = new RGWDataChangesLog(cct, this);
   cr_registry = crs.release();
 
+  // 赋值给rados 变量
   std::swap(handles, rados);
   return ret;
 }

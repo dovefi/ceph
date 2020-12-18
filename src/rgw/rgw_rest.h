@@ -527,7 +527,7 @@ class RGWRESTMgr {
   bool should_log;
 
 protected:
-  std::map<std::string, RGWRESTMgr*> resource_mgrs;
+  std::map<std::string, RGWRESTMgr*> resource_mgrs;         // 存储请求路径对应的处理器
   std::multimap<size_t, std::string> resources_by_size;
   RGWRESTMgr* default_mgr;
 
@@ -617,6 +617,7 @@ public:
     mgr.register_resource(resource, m);
   }
 
+  // 设置默认的请求处理管理器，"/" 路径下的
   void register_default_mgr(RGWRESTMgr *m) {
     mgr.register_default_mgr(m);
   }

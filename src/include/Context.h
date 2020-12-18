@@ -61,7 +61,7 @@ class Context {
   const Context& operator=(const Context& other);
 
  protected:
-  virtual void finish(int r) = 0;
+  virtual void finish(int r) = 0; // 事件的处理方法，后续继承的类需要重写
 
  public:
   Context() {}

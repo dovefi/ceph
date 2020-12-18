@@ -196,6 +196,7 @@ int main(int argc, const char **argv)
     return ENOSYS;
   }
 
+  // 默认配置项
   /* alternative default for module */
   vector<const char *> def_args;
   def_args.push_back("--debug-rgw=1/5");
@@ -291,6 +292,7 @@ int main(int argc, const char **argv)
   SafeTimer init_timer(g_ceph_context, mutex);
   init_timer.init();
   mutex.Lock();
+  // 新增初始化定时器，如果初始化超时了，那就退出
   init_timer.add_event_after(g_conf->rgw_init_timeout, new C_InitTimeout);
   mutex.Unlock();
 
@@ -305,13 +307,16 @@ int main(int argc, const char **argv)
     return -r;
   }
 
+  // 初始化dns解析服务
   rgw_init_resolver();
   rgw::curl::setup_curl(fe_map);
 
+  // 如果定义了fcgi的宏才执行初始化
 #if defined(WITH_RADOSGW_FCGI_FRONTEND)
   FCGX_Init();
 #endif
 
+  // 初始化rgw rados
   RGWRados *store = RGWStoreManager::get_storage(g_ceph_context,
       g_conf->rgw_enable_gc_threads, g_conf->rgw_enable_lc_threads, g_conf->rgw_enable_quota_threads,
       g_conf->rgw_run_sync_thread, g_conf->rgw_dynamic_resharding, g_conf->rgw_cache_enabled);
@@ -324,12 +329,14 @@ int main(int argc, const char **argv)
     derr << "Couldn't init storage provider (RADOS)" << dendl;
     return EIO;
   }
+  // 启动指标监测
   r = rgw_perf_start(g_ceph_context);
   if (r < 0) {
     derr << "ERROR: failed starting rgw perf" << dendl;
     return -r;
   }
 
+  // 初始化restful相关的如http字段，状态码，hostname等
   rgw_rest_init(g_ceph_context, store, store->get_zonegroup());
 
   mutex.Lock();
@@ -337,14 +344,19 @@ int main(int argc, const char **argv)
   init_timer.shutdown();
   mutex.Unlock();
 
+  // 初始化rgw用户，用户数据缓存等
   rgw_user_init(store);
+  // 注册bucket 元数据相关的缓存
   rgw_bucket_init(store->meta_mgr);
+  // 初始化使用量日志
   rgw_log_usage_init(g_ceph_context, store);
 
   RGWREST rest;
 
   list<string> apis;
 
+  // 获取支持的api
+  // "rgw_enable_apis": "s3, s3website, swift, swift_auth, admin"
   get_str_list(g_conf->rgw_enable_apis, apis);
 
   map<string, bool> apis_map;
@@ -358,6 +370,8 @@ int main(int argc, const char **argv)
   const bool swift_at_root = g_conf->rgw_swift_url_prefix == "/";
   if (apis_map.count("s3") > 0 || s3website_enabled) {
     if (! swift_at_root) {
+        // 注册s3 相关操作路由跟处理方法，bucket 操作，对象操作, 这里用到了设置
+        // RGW_REST_S3  为默认的处理器，因为 "/" 路径下默认都是bucket跟object的操作
       rest.register_default_mgr(set_logging(rest_filter(store, RGW_REST_S3,
                                                         new RGWRESTMgr_S3(s3website_enabled))));
     } else {
@@ -401,6 +415,7 @@ int main(int argc, const char **argv)
                set_logging(new RGWRESTMgr_SWIFT_Auth));
   }
 
+  // 注册admin 操作路由跟处理方法
   if (apis_map.count("admin") > 0) {
     RGWRESTMgr_Admin *admin_resource = new RGWRESTMgr_Admin;
     admin_resource->register_resource("usage", new RGWRESTMgr_Usage);
@@ -414,6 +429,7 @@ int main(int argc, const char **argv)
     admin_resource->register_resource("replica_log", new RGWRESTMgr_ReplicaLog);
     admin_resource->register_resource("config", new RGWRESTMgr_Config);
     admin_resource->register_resource("realm", new RGWRESTMgr_Realm);
+    /*Registering resource for /admin */
     rest.register_resource(g_conf->rgw_admin_entry, admin_resource);
   }
 
@@ -427,19 +443,23 @@ int main(int argc, const char **argv)
   /* Header custom behavior */
   rest.register_x_headers(g_conf->rgw_log_http_headers);
 
+  // rgw操作记录socket
   OpsLogSocket *olog = NULL;
 
+  // 如果socket 路径文件存在，那么初始化
   if (!g_conf->rgw_ops_log_socket_path.empty()) {
     olog = new OpsLogSocket(g_ceph_context, g_conf->rgw_ops_log_data_backlog);
     olog->init(g_conf->rgw_ops_log_socket_path);
   }
 
+  // 初始化信号通信，本地进程间的通讯方式
   r = signal_fd_init();
   if (r < 0) {
     derr << "ERROR: unable to initialize signal fds" << dendl;
     exit(1);
   }
 
+  // 注册信号处理函数
   init_async_signal_handler();
   register_async_signal_handler(SIGHUP, sighup_handler);
   register_async_signal_handler(SIGTERM, handle_sigterm);
@@ -467,6 +487,7 @@ int main(int argc, const char **argv)
 
       RGWProcessEnv env = { store, &rest, olog, 0, uri_prefix, auth_registry };
 
+      // 新建一个 civetweb前段网关处理，http网关
       fe = new RGWCivetWebFrontend(env, config);
     }
     else if (framework == "loadgen") {
@@ -510,11 +531,13 @@ int main(int argc, const char **argv)
     }
 
     dout(0) << "starting handler: " << fiter->first << dendl;
+    // 初始化网关
     int r = fe->init();
     if (r < 0) {
       derr << "ERROR: failed initializing frontend" << dendl;
       return -r;
     }
+    // 启动网关
     r = fe->run();
     if (r < 0) {
       derr << "ERROR: failed run" << dendl;
@@ -531,7 +554,7 @@ int main(int argc, const char **argv)
     /* ignore error */
   }
 
-
+  // 监听在线变更配置文件
   // add a watcher to respond to realm configuration changes
   RGWPeriodPusher pusher(store);
   RGWFrontendPauser pauser(fes, implicit_tenant_context, &pusher);
@@ -547,6 +570,7 @@ int main(int argc, const char **argv)
   }
 #endif
 
+  // 等待关闭信号
   wait_shutdown();
 
   derr << "shutting down" << dendl;

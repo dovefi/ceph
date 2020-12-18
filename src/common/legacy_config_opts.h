@@ -12,6 +12,10 @@
  *
  */
 
+/*
+ * 这个文件全部是配置的宏定义，在common/confi.h:351 中会被引入，用来替换配置结构体的变量
+ * 同时这个文件代表所有的配置项
+ * */
 /* note: no header guard */
 OPTION(host, OPT_STR) // "" means that ceph will use short hostname
 OPTION(public_addr, OPT_ADDR)

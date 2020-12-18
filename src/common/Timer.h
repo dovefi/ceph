@@ -22,6 +22,10 @@ class CephContext;
 class Context;
 class SafeTimerThread;
 
+/*
+ * SafeTimer 主要用来时间定时任务，比如osd的心跳，monitor之间的心跳
+ * 文档地址: https://blog.csdn.net/u013946404/article/details/84320890
+ * */
 class SafeTimer
 {
   CephContext *cct;
@@ -29,12 +33,17 @@ class SafeTimer
   Cond cond;
   bool safe_callbacks;
 
+  // 友元类，可以让thread访问私有和保护变量
   friend class SafeTimerThread;
   SafeTimerThread *thread;
 
+  // 定时器线程的执行函数
   void timer_thread();
   void _shutdown();
 
+  // schedule和events都表示定时器任务集,
+  // 前者采取时间到事件的映射方式,主要用于定时器线程按时间执行定时器任务.
+  // 后都采用事件到迭代器的映射方法,主要用于主线程按事件名取消事件.
   std::multimap<utime_t, Context*> schedule;
   std::map<Context*, std::multimap<utime_t, Context*>::iterator> events;
   bool stopping;
@@ -65,12 +74,16 @@ public:
    *
    * If there are any events that still have to run, they will need to take
    * the event_lock first. */
+  // 新建定时器线程，并启动
   void init();
+  // 取消全部定时器事件，销毁定时器线程
   void shutdown();
 
   /* Schedule an event in the future
    * Call with the event_lock LOCKED */
+  // 根据相对时间来增加定时器事件
   Context* add_event_after(double seconds, Context *callback);
+  // 根据绝对时间增加定时器事件
   Context* add_event_at(utime_t when, Context *callback);
 
   /* Cancel an event.
@@ -79,6 +92,7 @@ public:
    * Returns true if the callback was cancelled.
    * Returns false if you never addded the callback in the first place.
    */
+  // 根据事件名取消事件
   bool cancel_event(Context *callback);
 
   /* Cancel all events.
@@ -87,6 +101,7 @@ public:
    * When this function returns, all events have been cancelled, and there are no
    * more in progress.
    */
+  // 取消全部定时器事件
   void cancel_all_events();
 
 };

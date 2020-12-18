@@ -19,6 +19,7 @@
 #include <pthread.h>
 #include <sys/types.h>
 
+// 自定义线程类，封装了pthread
 class Thread {
  private:
   pthread_t thread_id;
