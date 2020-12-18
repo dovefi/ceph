@@ -17,6 +17,7 @@ static int civetweb_callback(struct mg_connection* conn)
   return static_cast<RGWCivetWebFrontend *>(req_info->user_data)->process(conn);
 }
 
+// http 请求处理函数入口
 int RGWCivetWebFrontend::process(struct mg_connection*  const conn)
 {
   /* Hold a read lock over access to env.store for reconfiguration. */
@@ -103,8 +104,11 @@ int RGWCivetWebFrontend::run()
 
   options.push_back(nullptr);
   /* Initialize the CivetWeb right now. */
+  // 代码定义在 src/civetweb/include/civetweb.h:95
   struct mg_callbacks cb;
   memset((void *)&cb, 0, sizeof(cb));
+  // 设置civetweb 接受到请求之后的回调函数
+  // 当接收到请求之后，调用begin_request.
   cb.begin_request = civetweb_callback;
   cb.log_message = rgw_civetweb_log_callback;
   cb.log_access = rgw_civetweb_log_access_callback;
