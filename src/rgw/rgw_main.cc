@@ -485,6 +485,7 @@ int main(int argc, const char **argv)
       std::string uri_prefix;
       config->get_val("prefix", "", &uri_prefix);
 
+      // 初始化整个rgw处理器的环境变量
       RGWProcessEnv env = { store, &rest, olog, 0, uri_prefix, auth_registry };
 
       // 新建一个 civetweb前段网关处理，http网关

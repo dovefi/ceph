@@ -13,17 +13,29 @@
 
 static int civetweb_callback(struct mg_connection* conn)
 {
+  // 结构体定义 src/civetweb/include/civetweb.h:57
+  // 获取具体的请求，req_info 的user_data 是 mg_start() 的时候传递给web服务器的
+  // RGWCivetWebFrontend 实体
   const struct mg_request_info* const req_info = mg_get_request_info(conn);
   return static_cast<RGWCivetWebFrontend *>(req_info->user_data)->process(conn);
 }
 
-// http 请求处理函数入口
+// http 请求真正的处理函数入口
 int RGWCivetWebFrontend::process(struct mg_connection*  const conn)
 {
   /* Hold a read lock over access to env.store for reconfiguration. */
   RWLock::RLocker lock(env.mutex);
 
   RGWCivetWeb cw_client(conn);
+  // 给RGWCivetWeb 加上各种过滤器
+  // 返回一个 src/rgw/rgw_client_io.h:88
+  /*
+   *                                                      --> ConlenControllingFilter   ④
+   *                                                      --> ChunkingFilter            ③
+   * BasicClient-->RestFulClient-->DecoratedRestfulClient --> BufferingFilter           ②
+   *                                                      --> RecorderingFilter         ①
+   * 通过模板类，各filter实现不桶的方法，调用顺序是 ①，②，③，④
+   * */
   auto real_client_io = rgw::io::add_reordering(
                           rgw::io::add_buffering(dout_context,
                             rgw::io::add_chunking(
@@ -31,6 +43,7 @@ int RGWCivetWebFrontend::process(struct mg_connection*  const conn)
                                 &cw_client))));
   RGWRestfulIO client_io(dout_context, &real_client_io);
 
+  // 创建request 请求体
   RGWRequest req(env.store->get_new_req_id());
   int http_ret = 0;
   int ret = process_request(env.store, env.rest, &req, env.uri_prefix,
@@ -48,6 +61,7 @@ int RGWCivetWebFrontend::process(struct mg_connection*  const conn)
   return http_ret;
 }
 
+// 启动civeWeb http 网关
 int RGWCivetWebFrontend::run()
 {
   auto& conf_map = conf->get_config_map();
@@ -112,6 +126,9 @@ int RGWCivetWebFrontend::run()
   cb.begin_request = civetweb_callback;
   cb.log_message = rgw_civetweb_log_callback;
   cb.log_access = rgw_civetweb_log_access_callback;
+  // 启动web 服务器，定义 src/civetweb/include/civetweb.h:254
+  // 其中 this 是将当前 RGWCivetWebFrontend 指针传递给web服务器的 void* user_data
+  // 用作回调。
   ctx = mg_start(&cb, this, options.data());
 
   return ! ctx ? -EIO : 0;
