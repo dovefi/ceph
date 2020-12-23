@@ -34,7 +34,8 @@ int RGWCivetWebFrontend::process(struct mg_connection*  const conn)
    *                                                      --> ChunkingFilter            ③
    * BasicClient-->RestFulClient-->DecoratedRestfulClient --> BufferingFilter           ②
    *                                                      --> RecorderingFilter         ①
-   * 通过模板类，各filter实现不桶的方法，调用顺序是 ①，②，③，④
+   * 通过模板类，各filter实现不同的方法，调用顺序是 ①，②，③，④
+   * 可以参考的文档: https://cloud.tencent.com/developer/article/1630637
    * */
   auto real_client_io = rgw::io::add_reordering(
                           rgw::io::add_buffering(dout_context,
