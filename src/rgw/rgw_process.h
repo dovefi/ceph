@@ -28,6 +28,7 @@
 
 extern void signal_shutdown();
 
+// rgw进程运行环境
 struct RGWProcessEnv {
   RGWRados *store;
   RGWREST *rest;
@@ -39,7 +40,9 @@ struct RGWProcessEnv {
 
 class RGWFrontendConfig;
 
+// rgw 处理器
 class RGWProcess {
+    // 双端队列，存储rgw请求
   deque<RGWRequest*> m_req_queue;
 protected:
   CephContext *cct;
@@ -53,6 +56,7 @@ protected:
   int sock_fd;
   std::string uri_prefix;
 
+  // 工作队列正式
   struct RGWWQ : public ThreadPool::WorkQueue<RGWRequest> {
     RGWProcess* process;
     RGWWQ(RGWProcess* p, time_t timeout, time_t suicide_timeout, ThreadPool* tp)

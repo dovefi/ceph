@@ -404,6 +404,7 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
   RGWUserInfo bucket_owner_info;
   RGWObjectCtx obj_ctx(store);
 
+  // 从http参数中获取bucket 信息
   string bi = s->info.args.get(RGW_SYS_PARAM_PREFIX "bucket-instance");
   if (!bi.empty()) {
     ret = rgw_bucket_parse_bucket_instance(bi, &s->bucket_instance_id, &s->bucket_instance_shard_id);
@@ -452,6 +453,7 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
   if (!s->bucket_name.empty()) {
     s->bucket_exists = true;
     if (s->bucket_instance_id.empty()) {
+      // 获取bucket信息
       ret = store->get_bucket_info(obj_ctx, s->bucket_tenant, s->bucket_name, s->bucket_info, NULL, &s->bucket_attrs);
     } else {
       ret = store->get_bucket_instance_info(obj_ctx, s->bucket_instance_id, s->bucket_info, NULL, &s->bucket_attrs);

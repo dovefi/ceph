@@ -108,7 +108,9 @@ int rgw_read_user_buckets(RGWRados * store,
   int ret;
   buckets.clear();
   std::string buckets_obj_id;
+  // buckets_obj_id = [userid].buckets
   rgw_get_buckets_obj(user_id, buckets_obj_id);
+  // 组装成一个rgw底层对象，也就是rados 对象
   rgw_raw_obj obj(store->get_zone_params().user_uid_pool, buckets_obj_id);
 
   bool truncated = false;

@@ -40,6 +40,7 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
                               const bool skip_retarget)
 {
   req->log(s, "init permissions");
+  // 初始化权限
   int ret = handler->init_permissions(op);
   if (ret < 0) {
     return ret;
@@ -68,6 +69,7 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   }
 
   req->log(s, "init op");
+  // 初始化一些quota的信息
   ret = op->init_processing();
   if (ret < 0) {
     return ret;
@@ -80,6 +82,7 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   }
 
   req->log(s, "verifying op permissions");
+  // 验证操作权限
   ret = op->verify_permission();
   if (ret < 0) {
     if (s->system_request) {
@@ -92,6 +95,7 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   }
 
   req->log(s, "verifying op params");
+  // 校验参数
   ret = op->verify_params();
   if (ret < 0) {
     return ret;
@@ -118,12 +122,15 @@ int process_request(RGWRados* const store,
                     OpsLogSocket* const olog,
                     int* http_ret)
 {
+  // 答应请求的一些信息
   int ret = client_io->init(g_ceph_context);
 
+  // 初始化请求时间
   req->log_init();
 
   dout(1) << "====== starting new request req=" << hex << req << dec
 	  << " =====" << dendl;
+  // 增加计数器
   perfcounter->inc(l_rgw_req);
 
   RGWEnv& rgw_env = client_io->get_env();
@@ -152,6 +159,7 @@ int process_request(RGWRados* const store,
   int init_error = 0;
   bool should_log = false;
   RGWRESTMgr *mgr;
+  // 根据prefix 路由获取对应的处理器
   RGWHandler_REST *handler = rest->get_handler(store, s,
                                                auth_registry,
                                                frontend_prefix,
@@ -160,10 +168,13 @@ int process_request(RGWRados* const store,
     abort_early(s, nullptr, init_error, nullptr);
     goto done;
   }
+  // 打印真实的handler名字;
+  // eg: 比如listbuckets 实际上是 s3的操作，对应 --> RGWHandler_REST_Service_S3
   dout(10) << "handler=" << typeid(*handler).name() << dendl;
 
   should_log = mgr->get_logging();
-
+  // 获取真实op操作
+  // eg: src/rgw/rgw_rest_s3.cc:2934
   req->log_format(s, "getting op %d", s->op);
   op = handler->get_op(store);
   if (!op) {
@@ -172,11 +183,17 @@ int process_request(RGWRados* const store,
   }
 
   req->op = op;
+  // eg: RGWListBuckets_ObjStore_S3 --> RGWListBuckets_ObjStore --> RGWListBuckets::get_type()
   dout(10) << "op=" << typeid(*op).name() << dendl;
 
+  // 获取操作类型
+  // eg: RGWListBuckets_ObjStore_S3 --> RGWListBuckets_ObjStore --> RGWListBuckets::get_type() --> RGW_OP_LIST_BUCKETS
   s->op_type = op->get_type();
 
   req->log(s, "verifying requester");
+  // 验证请求用户信息
+  // eg: dialect_handler->authorize() --> RGWHandler_REST_Service_S3 --> RGWHandler_REST_S3::authorize()
+  // --> RGW_Auth_S3::authorize()  src/rgw/rgw_rest_s3.cc:3380
   ret = op->verify_requester(auth_registry);
   if (ret < 0) {
     dout(10) << "failed to authorize request" << dendl;
@@ -204,6 +221,7 @@ int process_request(RGWRados* const store,
     goto done;
   }
 
+  // 处理权限
   ret = rgw_process_authenticated(handler, op, req, s);
   if (ret < 0) {
     abort_early(s, op, ret, handler);

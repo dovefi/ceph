@@ -13918,6 +13918,7 @@ int RGWRados::cls_user_get_bucket_stats(const rgw_bucket& bucket, cls_user_bucke
   return 0;
 }
 
+// cls 开头的函数就是跟底层librados打交道的
 int RGWRados::cls_user_list_buckets(rgw_raw_obj& obj,
                                     const string& in_marker,
                                     const string& end_marker,
