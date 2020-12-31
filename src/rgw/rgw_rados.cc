@@ -13927,6 +13927,7 @@ int RGWRados::cls_user_list_buckets(rgw_raw_obj& obj,
                                     string * const out_marker,
                                     bool * const truncated)
 {
+  // 初始化相关的rados 上下文
   rgw_rados_ref ref;
   int r = get_raw_obj_ref(obj, &ref);
   if (r < 0) {
@@ -13935,9 +13936,10 @@ int RGWRados::cls_user_list_buckets(rgw_raw_obj& obj,
 
   librados::ObjectReadOperation op;
   int rc;
-
+  // 初始化操作
   cls_user_bucket_list(op, in_marker, end_marker, max_entries, entries, out_marker, truncated, &rc);
   bufferlist ibl;
+  // 执行操作
   r = ref.ioctx.operate(ref.oid, &op, &ibl);
   if (r < 0)
     return r;
