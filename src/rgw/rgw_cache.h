@@ -136,7 +136,7 @@ struct ObjectCacheEntry {
 };
 
 class ObjectCache {
-  std::map<string, ObjectCacheEntry> cache_map;
+  std::map<string, ObjectCacheEntry> cache_map; // 对象名和对象缓存入口，用于存放需要缓存的数据
   std::list<string> lru;
   unsigned long lru_size;
   unsigned long lru_counter;
@@ -144,7 +144,7 @@ class ObjectCache {
   RWLock lock;
   CephContext *cct;
 
-  list<RGWChainedCache *> chained_cache;
+  list<RGWChainedCache *> chained_cache;  // RGWChainedCache 指针列表
 
   bool enabled;
   ceph::timespan expiry;
@@ -156,6 +156,7 @@ class ObjectCache {
   void do_invalidate_all();
 public:
   ObjectCache() : lru_size(0), lru_counter(0), lru_window(0), lock("ObjectCache"), cct(NULL), enabled(false) { }
+  // 通过对象名查找cache entry
   int get(const std::string& name, ObjectCacheInfo& bl, uint32_t mask, rgw_cache_entry_info *cache_info);
   boost::optional<ObjectCacheInfo> get(const std::string& name) {
     boost::optional<ObjectCacheInfo> info{boost::in_place_init};
@@ -192,9 +193,13 @@ public:
   void invalidate_all();
 };
 
+// 这里需要注意的是，RGWCache 实际上继承的是RGWRados，只是这里定义为模板了
+// 可参考文档: https://rjerk.xyz/index.php/archives/99/comment-page-1
+// https://bbs.huaweicloud.com/blogs/144531
 template <class T>
 class RGWCache  : public T
 {
+    // 保存所有的cache 对象
   ObjectCache cache;
 
   int list_objects_raw_init(rgw_pool& pool, RGWAccessHandle *handle) {
@@ -230,6 +235,7 @@ class RGWCache  : public T
     return true;
   }
 
+  // 分布式缓存
   int distribute_cache(const string& normal_name, rgw_raw_obj& obj, ObjectCacheInfo& obj_info, int op);
   int watch_cb(uint64_t notify_id,
 	       uint64_t cookie,
@@ -574,15 +580,18 @@ int RGWCache<T>::distribute_cache(const string& normal_name, rgw_raw_obj& obj, O
   return T::distribute(normal_name, bl);
 }
 
+// watch 的回调函数
 template <class T>
 int RGWCache<T>::watch_cb(uint64_t notify_id,
 			  uint64_t cookie,
 			  uint64_t notifier_id,
 			  bufferlist& bl)
 {
+  // bufferlist 就是通知里面的数据
   RGWCacheNotifyInfo info;
 
   try {
+    // 解码数据
     bufferlist::iterator iter = bl.begin();
     ::decode(info, iter);
   } catch (buffer::end_of_buffer& err) {
@@ -597,7 +606,8 @@ int RGWCache<T>::watch_cb(uint64_t notify_id,
   string oid;
   normalize_pool_and_obj(info.obj.pool, info.obj.oid, pool, oid);
   string name = normal_name(pool, oid);
-  
+
+  // 更新缓存
   switch (info.op) {
   case UPDATE_OBJ:
     cache.put(name, info.obj_info, NULL);

@@ -2867,6 +2867,7 @@ void RGWRados::remove_watcher(int i)
   }
 }
 
+// 继承了librados的wathch，WatchCtx2会调用handle_notify
 class RGWWatcher : public librados::WatchCtx2 {
   RGWRados *rados;
   int index;
@@ -2883,6 +2884,7 @@ class RGWWatcher : public librados::WatchCtx2 {
   };
 public:
   RGWWatcher(RGWRados *r, int i, const string& o) : rados(r), index(i), oid(o), watch_handle(0) {}
+  // 被监听的对象有通知事件时，会更新自己的本地缓存
   void handle_notify(uint64_t notify_id,
 		     uint64_t cookie,
 		     uint64_t notifier_id,
@@ -2892,6 +2894,7 @@ public:
 			    << " cookie " << cookie
 			    << " notifier " << notifier_id
 			    << " bl.length()=" << bl.length() << dendl;
+    // 在 rados 里注册的回调函数，RGWCache<RGWRados>::watch_cb
     rados->watch_cb(notify_id, cookie, notifier_id, bl);
 
     bufferlist reply_bl; // empty reply payload
@@ -4832,13 +4835,21 @@ int RGWRados::open_reshard_pool_ctx()
   return rgw_init_ioctx(get_rados_handle(), get_zone_params().reshard_pool, reshard_pool_ctx, true);
 }
 
+// RGW Cache 通过 watch/notify 进行同步
+// 当缓存被更新，会将更新通知给所有监听者
 int RGWRados::init_watch()
 {
+  // 初始化一个radosCtx，对应的pool是rgw.control
   int r = rgw_init_ioctx(&rados[0], get_zone_params().control_pool, control_pool_ctx, true);
   if (r < 0) {
     return r;
   }
 
+  // 同一 zone 的 RGWs 通过一定数量的控制对象来发送信息，
+  // 这些信息包括当元数据被修改时元数据缓存失效信息. 默认为 8 个
+  // 决定了用于同步RGW缓存的同步器数目，该数目需要和RGW（librgw）的数目做配合，
+  // 最好是RGW（librgw）数量的2-3倍，并是2的指数倍数。如果该值太小，
+  // 会导致同步过于集中到单个OSD中，引起 slow request 问题。
   num_watchers = cct->_conf->rgw_num_control_oids;
 
   bool compat_oid = (num_watchers == 0);
@@ -4847,6 +4858,7 @@ int RGWRados::init_watch()
     num_watchers = 1;
 
   notify_oids = new string[num_watchers];
+  // 新建rgw watcher
   watchers = new RGWWatcher *[num_watchers];
 
   for (int i=0; i < num_watchers; i++) {
@@ -4857,6 +4869,8 @@ int RGWRados::init_watch()
       snprintf(buf, sizeof(buf), ".%d", i);
       notify_oid.append(buf);
     }
+    // librados::IoCtx，创建一个对象
+    // int create(const std::string& oid, bool exclusive);
     r = control_pool_ctx.create(notify_oid, false);
     if (r < 0 && r != -EEXIST)
       return r;
@@ -4864,6 +4878,7 @@ int RGWRados::init_watch()
     RGWWatcher *watcher = new RGWWatcher(this, i, notify_oid);
     watchers[i] = watcher;
 
+    // 注册watch
     r = watcher->register_watch();
     if (r < 0)
       return r;
@@ -14465,6 +14480,7 @@ RGWRados *RGWStoreManager::init_storage_provider(CephContext *cct, bool use_gc_t
   if (!use_cache) {
     store = new RGWRados;
   } else {
+    // RGWCache 继承了RGWRados ，也就是在RGWRados之上再封装了一层函数，这样就可以在操作rados的时候做缓存该做的事情
     store = new RGWCache<RGWRados>;
   }
 
