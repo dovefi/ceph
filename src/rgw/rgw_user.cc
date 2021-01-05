@@ -266,6 +266,7 @@ int rgw_get_user_info_from_index(RGWRados * const store,
                                  real_time * const pmtime)
 {
   user_info_entry e;
+  // 先从 user info chained cache 里找
   if (uinfo_cache.find(key, &e)) {
     info = e.info;
     if (objv_tracker)
@@ -279,6 +280,7 @@ int rgw_get_user_info_from_index(RGWRados * const store,
   RGWUID uid;
   RGWObjectCtx obj_ctx(store);
 
+  // 从 RGWCache 里读取，RGWCache 没找到会取得填入 bufferlist，然后更新缓存
   int ret = rgw_get_system_obj(store, obj_ctx, pool, key, bl, NULL, &e.mtime);
   if (ret < 0)
     return ret;

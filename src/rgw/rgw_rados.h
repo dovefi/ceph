@@ -3845,6 +3845,10 @@ public:
 
 };
 
+// rgw 链式lru缓存
+// 有两种实现
+// 1. RGWChainedCacheImpl<bucket_info_entry>  bucket 信息缓存
+// 2. RGWChainedCacheImpl<user_info_entry>    user 信息缓存
 template <class T>
 class RGWChainedCacheImpl : public RGWChainedCache {
   ceph::timespan expiry;

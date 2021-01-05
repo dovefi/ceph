@@ -144,7 +144,17 @@ class ObjectCache {
   RWLock lock;
   CephContext *cct;
 
-  list<RGWChainedCache *> chained_cache;  // RGWChainedCache 指针列表
+  // RGWChainedCache 指针列表, 在bucket 和user cache 初始化的时候，会将
+  // 注册后的链式缓存注册进来
+  // bucket : int RGWRados::initialize() -> int RGWRados::init_complete() ->
+  //          binfo_cache = new RGWChainedCacheImpl<bucket_info_entry>; binfo_cache->init(this);
+  // user:  rgw_user_init(store) -> uinfo_cache.init(store)
+  // 接下来全部回去到一个函数
+  // -> RGWCache->register_chained_cache
+  // -> RGWCache.ObjectCache->chain_cache(this)
+  // -> chained_cache.push_back(cache);
+
+  list<RGWChainedCache *> chained_cache;
 
   bool enabled;
   ceph::timespan expiry;
@@ -221,6 +231,7 @@ class RGWCache  : public T
     return normal_name(obj.pool, obj.oid);
   }
 
+  // 入口 RGWRados(RGWCache)::initialize() -> RGWCache::init_rados -> init_rados()
   int init_rados() override {
     int ret;
     cache.set_ctx(T::cct);
@@ -566,6 +577,11 @@ done:
   return 0;
 }
 
+// 分布式缓存同步，通知到其他的rgw实例
+// RGWCache<T>::system_obj_set_attrs
+// RGWCache<T>::put_system_obj_impl
+// RGWCache<T>::put_system_obj_data
+// RGWCache<T>::delete_system_obj
 template <class T>
 int RGWCache<T>::distribute_cache(const string& normal_name, rgw_raw_obj& obj, ObjectCacheInfo& obj_info, int op)
 {

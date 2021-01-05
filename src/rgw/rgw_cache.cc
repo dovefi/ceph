@@ -44,6 +44,11 @@ int ObjectCache::get(const string& name, ObjectCacheInfo& info, uint32_t mask, r
 
   ObjectCacheEntry *entry = &iter->second;
 
+  // lru_window 是 lru_size/2
+  // entry->lru_promotion_ts 缓存被击中的couter 点
+  // lru_counter 当前缓存击中次数，一直递增
+  // cache entry 已经落后到 LRU list 后半部分，需要清理 cache list 来淘汰长期未访问的 entry
+  // 这里的cache 是双向链表，尾插入形式，尾部是最新的数据
   if (lru_counter - entry->lru_promotion_ts > lru_window) {
     ldout(cct, 20) << "cache get: touching lru, lru_counter=" << lru_counter
                    << " promotion_ts=" << entry->lru_promotion_ts << dendl;
@@ -87,6 +92,7 @@ int ObjectCache::get(const string& name, ObjectCacheInfo& info, uint32_t mask, r
   return 0;
 }
 
+//binfo_cache.put -> RGWCache.chain_cache_entry -> ObjectCache::chain_cache_entry
 bool ObjectCache::chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_entries, RGWChainedCache::Entry *chained_entry)
 {
   RWLock::WLocker l(lock);
@@ -238,6 +244,7 @@ bool ObjectCache::remove(const string& name)
 void ObjectCache::touch_lru(const string& name, ObjectCacheEntry& entry,
 			    std::list<string>::iterator& lru_iter)
 {
+  // 如果 LRU 列表满了，则从头部删数据
   while (lru_size > (size_t)cct->_conf->rgw_cache_lru_size) {
     list<string>::iterator iter = lru.begin();
     if ((*iter).compare(name) == 0) {
