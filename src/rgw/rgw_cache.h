@@ -250,6 +250,7 @@ class RGWCache  : public T
     return 0;
   }
 
+  // 是否需要watch notify 机制，因为需要实现分布式cache，所以这里需要
   bool need_watch_notify() override {
     return true;
   }

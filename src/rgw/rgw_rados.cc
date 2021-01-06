@@ -4559,9 +4559,11 @@ int RGWRados::init_complete()
 
   pools_initialized = true;
 
+  // 初始化GC
   gc = new RGWGC();
   gc->initialize(cct, this);
 
+  // 初始化LC
   obj_expirer = new RGWObjectExpirer(this);
 
   if (use_gc_thread) {
@@ -4835,6 +4837,7 @@ int RGWRados::open_reshard_pool_ctx()
   return rgw_init_ioctx(get_rados_handle(), get_zone_params().reshard_pool, reshard_pool_ctx, true);
 }
 
+// RGWRados::init_complete -> init_watch()
 // RGW Cache 通过 watch/notify 进行同步
 // 当缓存被更新，会将更新通知给所有监听者
 int RGWRados::init_watch()
@@ -4854,6 +4857,7 @@ int RGWRados::init_watch()
 
   bool compat_oid = (num_watchers == 0);
 
+  // 最少一个watcher
   if (num_watchers <= 0)
     num_watchers = 1;
 
