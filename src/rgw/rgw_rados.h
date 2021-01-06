@@ -3854,11 +3854,13 @@ class RGWChainedCacheImpl : public RGWChainedCache {
   ceph::timespan expiry;
   RWLock lock;
 
+  // 缓存数据map，
   map<string, std::pair<T, ceph::coarse_mono_time>> entries;
 
 public:
   RGWChainedCacheImpl() : lock("RGWChainedCacheImpl::lock") {}
 
+  // 注册chainCache 指针到RGWCache.ObjectCache.chained_cache, 用作后续清理通知使用
   void init(RGWRados *store) {
     store->register_chained_cache(this);
     expiry = std::chrono::seconds(store->ctx()->_conf->get_val<uint64_t>(
@@ -3887,6 +3889,7 @@ public:
     return store->chain_cache_entry(cache_info_entries, &chain_entry);
   }
 
+  // 更新缓存
   void chain_cb(const string& key, void *data) override {
     T *entry = static_cast<T *>(data);
     RWLock::WLocker wl(lock);

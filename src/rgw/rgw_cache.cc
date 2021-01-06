@@ -110,6 +110,7 @@ bool ObjectCache::chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_ent
     rgw_cache_entry_info *cache_info = *citer;
 
     ldout(cct, 10) << "chain_cache_entry: cache_locator=" << cache_info->cache_locator << dendl;
+    // rgw_cache_entry_info.cache_locator 就是 cache_map 中的key
     map<string, ObjectCacheEntry>::iterator iter = cache_map.find(cache_info->cache_locator);
     if (iter == cache_map.end()) {
       ldout(cct, 20) << "chain_cache_entry: couldn't find cache locator" << dendl;
@@ -118,6 +119,7 @@ bool ObjectCache::chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_ent
 
     ObjectCacheEntry *entry = &iter->second;
 
+    // 校验版本号
     if (entry->gen != cache_info->gen) {
       ldout(cct, 20) << "chain_cache_entry: entry.gen (" << entry->gen << ") != cache_info.gen (" << cache_info->gen << ")" << dendl;
       return false;
@@ -127,6 +129,7 @@ bool ObjectCache::chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_ent
   }
 
 
+  // chainCacheImpl 的回调函数，目的是为了更新上层binfo_cache(uinfo_cache)的缓存数据
   chained_entry->cache->chain_cb(chained_entry->key, chained_entry->data);
 
   list<ObjectCacheEntry *>::iterator liter;
@@ -134,6 +137,7 @@ bool ObjectCache::chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_ent
   for (liter = cache_entry_list.begin(); liter != cache_entry_list.end(); ++liter) {
     ObjectCacheEntry *entry = *liter;
 
+    // 更新chained_entries 的chainCache,保持上下层缓存一致
     entry->chained_entries.push_back(make_pair(chained_entry->cache, chained_entry->key));
   }
 

@@ -52,9 +52,13 @@ struct ObjectCacheInfo {
   int status = 0;
   uint32_t flags = 0;
   uint64_t epoch = 0;
+
+  // 存储rados object data数据
   bufferlist data;
+  // 存储rados xattr 数据
   map<string, bufferlist> xattrs;
   map<string, bufferlist> rm_xattrs;
+  // 存储rados object的meta数据
   ObjectMetaInfo meta;
   obj_version version = {};
   ceph::coarse_mono_time time_added;
@@ -130,6 +134,10 @@ struct ObjectCacheEntry {
   std::list<string>::iterator lru_iter;
   uint64_t lru_promotion_ts;
   uint64_t gen;
+
+  // 每一个ObjectCacheEntry 都需要记录自己这个数据对应的上层的chainCache的指针，因为缓存是保存两份的
+  // 一份是在binfo_cache（uinfo_cache）中，一份是在底层的这个ObjectCache，这里保存链表的地址，目的是为了通知上层做删除，或者更新
+  // 映射关系是：ObjectCache ---> key --> ObjectCacheEntry --> key --> RGWChainedCache
   std::list<pair<RGWChainedCache *, string> > chained_entries;
 
   ObjectCacheEntry() : lru_promotion_ts(0), gen(0) {}
@@ -145,7 +153,7 @@ class ObjectCache {
   CephContext *cct;
 
   // RGWChainedCache 指针列表, 在bucket 和user cache 初始化的时候，会将
-  // 注册后的链式缓存注册进来
+  // 注册后的链式缓存指针注册进来，作用是当objectCache 需要清理缓存的时候，可以直接通知到对应的链式缓存全部清理掉
   // bucket : int RGWRados::initialize() -> int RGWRados::init_complete() ->
   //          binfo_cache = new RGWChainedCacheImpl<bucket_info_entry>; binfo_cache->init(this);
   // user:  rgw_user_init(store) -> uinfo_cache.init(store)

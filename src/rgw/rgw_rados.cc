@@ -12482,7 +12482,7 @@ int RGWRados::_get_bucket_info(RGWObjectCtx& obj_ctx,
 
 
   /* chain to both bucket entry point and bucket instance */
-  // 更新ObjectCache.cache_map
+  // 更新binfo_cache，并且将底层对应的objectCache cache_map 挂上关联
   if (!binfo_cache->put(this, bucket_entry, &e, cache_info_entries)) {
     ldout(cct, 20) << "couldn't put binfo cache entry, might have raced with data changes" << dendl;
   }
