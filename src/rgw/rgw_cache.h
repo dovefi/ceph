@@ -358,6 +358,7 @@ int RGWCache<T>::get_system_obj(RGWObjectCtx& obj_ctx, RGWRados::SystemObject::R
   if (attrs)
     flags |= CACHE_FLAG_XATTRS;
 
+  // flags 代表请求的数据需要携带的信息
   if ((cache.get(name, info, flags, cache_info) == 0) &&
       (!refresh_version || !info.version.compare(&(*refresh_version)))) {
     if (info.status < 0)
@@ -376,6 +377,7 @@ int RGWCache<T>::get_system_obj(RGWObjectCtx& obj_ctx, RGWRados::SystemObject::R
       *attrs = info.xattrs;
     return bl.length();
   }
+
   int r = T::get_system_obj(obj_ctx, read_state, objv_tracker, obj, obl, ofs, end, attrs, cache_info);
   if (r < 0) {
     if (r == -ENOENT) { // only update ENOENT, we'd rather retry other errors

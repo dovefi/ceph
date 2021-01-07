@@ -71,6 +71,7 @@ int ObjectCache::get(const string& name, ObjectCacheInfo& info, uint32_t mask, r
   }
 
   ObjectCacheInfo& src = iter->second.info;
+  // src.flags 表示缓存的对象携带的信息，mask表示用户请求的信息，如果没有比匹配上则表示，缓存的数据里面没有我想要的数据
   if ((src.flags & mask) != mask) {
     ldout(cct, 10) << "cache get: name=" << name << " : type miss (requested=0x"
                    << std::hex << mask << ", cached=0x" << src.flags
