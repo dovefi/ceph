@@ -2860,7 +2860,7 @@ public:
         uint64_t olh_epoch;
         string marker_version_id;
         uint32_t bilog_flags;
-        list<rgw_obj_index_key> *remove_objs;
+        list<rgw_obj_index_key> *remove_objs; // index key
         ceph::real_time expiration_time;
         ceph::real_time unmod_since;
         ceph::real_time mtime; /* for setting delete marker mtime */

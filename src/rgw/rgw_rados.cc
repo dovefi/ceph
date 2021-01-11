@@ -3393,6 +3393,7 @@ int RGWRados::get_required_alignment(const rgw_pool& pool, uint64_t *alignment)
   }
 
   uint64_t align;
+  // 通过ceph osd dump 可以查看到每个pool的对齐size，stripe_width
   r = ioctx.pool_required_alignment2(&align);
   if (r < 0) {
     ldout(cct, 0) << "ERROR: ioctx.pool_required_alignment2() returned " 
@@ -3406,9 +3407,12 @@ int RGWRados::get_required_alignment(const rgw_pool& pool, uint64_t *alignment)
   return 0;
 }
 
+// rgw获取一次写入的最大对象大小
 int RGWRados::get_max_chunk_size(const rgw_pool& pool, uint64_t *max_chunk_size)
 {
   uint64_t alignment = 0;
+  // 获取对齐大小，如果是三副本，对齐大小为0，如果是ECpool k + m,则对齐大小 alignment = k * eccode_strip_unit
+  // 比如3+2的ec pool alignment = 3 * 4k = 12k
   int r = get_required_alignment(pool, &alignment);
   if (r < 0) {
     return r;
@@ -3426,6 +3430,7 @@ int RGWRados::get_max_chunk_size(const rgw_pool& pool, uint64_t *max_chunk_size)
     return 0;
   }
 
+  // 保证 max_chunk_size 是 alignment的整数倍
   *max_chunk_size = config_chunk_size - (config_chunk_size % alignment);
 
   ldout(cct, 20) << "max_chunk_size=" << *max_chunk_size << dendl;
@@ -9189,6 +9194,7 @@ int RGWRados::Object::Delete::delete_obj()
       if (r < 0) {
         return r;
       }
+      // 解除要删除的object跟head object之间的引用关系
       result.delete_marker = dirent.is_delete_marker();
       r = store->unlink_obj_instance(target->get_ctx(), target->get_bucket_info(), obj, params.olh_epoch, params.zones_trace);
       if (r < 0) {
@@ -9279,15 +9285,18 @@ int RGWRados::Object::Delete::delete_obj()
   RGWBucketInfo& bucket_info = target->get_bucket_info();
 
   RGWRados::Bucket bop(store, bucket_info);
+  // bucket index 操作，更新key状态最后删除key
   RGWRados::Bucket::UpdateIndex index_op(&bop, obj);
   
   index_op.set_zones_trace(params.zones_trace);
   index_op.set_bilog_flags(params.bilog_flags);
 
+
   r = index_op.prepare(CLS_RGW_OP_DEL, &state->write_tag);
   if (r < 0)
     return r;
 
+  // 删除对象的head object
   store->remove_rgw_head_obj(op);
   r = ref.ioctx.operate(ref.oid, &op);
 
@@ -9301,6 +9310,7 @@ int RGWRados::Object::Delete::delete_obj()
       tombstone_entry entry{*state};
       obj_tombstone_cache->add(obj, entry);
     }
+    // 删除bucket index object的omap记录
     r = index_op.complete_del(poolid, ref.ioctx.get_last_version(), state->mtime, params.remove_objs);
     
     int ret = target->complete_atomic_modification();
@@ -10381,6 +10391,7 @@ int RGWRados::Bucket::UpdateIndex::prepare(RGWModifyOp op, const string *write_t
     }
   }
 
+  // 检测是否在reshard
   int r = guard_reshard(nullptr, [&](BucketShard *bs) -> int {
 				   return store->cls_obj_prepare_op(*bs, op, optag, obj, bilog_flags, zones_trace);
 				 });
@@ -13261,7 +13272,9 @@ int RGWRados::cls_obj_prepare_op(BucketShard& bs, RGWModifyOp op, string& tag,
 
   ObjectWriteOperation o;
   cls_rgw_obj_key key(obj.key.get_index_key_name(), obj.key.instance);
+  // 校验bucket 是否正在做reshard 操作
   cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
+  //
   cls_rgw_bucket_prepare_op(o, op, tag, key, obj.key.get_loc(), get_zone().log_data, bilog_flags, zones_trace);
   return bs.index_ctx.operate(bs.bucket_obj, &o);
 }

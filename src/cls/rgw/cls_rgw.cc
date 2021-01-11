@@ -699,6 +699,7 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   // fill in proper state
   struct rgw_bucket_pending_info info;
   info.timestamp = real_clock::now();
+  // 设置操作对象问pending状态
   info.state = CLS_RGW_STATE_PENDING_MODIFY;
   info.op = op.op;
   entry.pending_map.insert(pair<string, rgw_bucket_pending_info>(op.tag, info));
@@ -710,6 +711,7 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
     return rc;
   }
 
+  // 是否记录op log
   if (op.log_op && !header.syncstopped) {
     rc = log_index_operation(hctx, op.key, op.op, op.tag, entry.meta.mtime,
                              entry.ver, info.state, header.ver, header.max_marker, op.bilog_flags, NULL, NULL, &op.zones_trace);
@@ -720,10 +722,12 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   // write out new key to disk
   bufferlist info_bl;
   ::encode(entry, info_bl);
+  // 设置omap
   rc = cls_cxx_map_set_val(hctx, idx, &info_bl);
   if (rc < 0)
     return rc;
 
+  // 写入index head
   return write_bucket_header(hctx, &header);
 }
 
