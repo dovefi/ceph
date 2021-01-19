@@ -5371,6 +5371,7 @@ int BlueStore::_setup_block_symlink_or_file(
   return 0;
 }
 
+// 初始化文件系统吧
 int BlueStore::mkfs()
 {
   dout(1) << __func__ << " path " << path << dendl;

@@ -183,12 +183,14 @@ int RGWOrphanStore::read_entries(const string& oid, const string& marker, map<st
 }
 
 int RGWOrphanSearch::init(const string& job_name, RGWOrphanSearchInfo *info) {
+  // 初始化log pool的ioctx
   int r = orphan_store.init();
   if (r < 0) {
     return r;
   }
 
   RGWOrphanSearchState state;
+  // 从 pool:default.rgw.log --> obj:orphan.index --> key:job_name 中获取当前的状态
   r = orphan_store.read_job(job_name, state);
   if (r < 0 && r != -ENOENT) {
     lderr(store->ctx()) << "ERROR: failed to read state ret=" << r << dendl;
@@ -205,6 +207,7 @@ int RGWOrphanSearch::init(const string& job_name, RGWOrphanSearchInfo *info) {
     search_info.start_time = ceph_clock_now();
     search_stage = RGWOrphanSearchStage(ORPHAN_SEARCH_STAGE_INIT);
 
+    // 保存状态: ORPHAN_SEARCH_STAGE_INIT
     r = save_state();
     if (r < 0) {
       lderr(store->ctx()) << "ERROR: failed to write state ret=" << r << dendl;
@@ -215,18 +218,22 @@ int RGWOrphanSearch::init(const string& job_name, RGWOrphanSearchInfo *info) {
       return r;
   }
 
+
   index_objs_prefix = RGW_ORPHAN_INDEX_PREFIX + string(".");
   index_objs_prefix += job_name;
 
+  // 初始化相关元数据对象
   for (int i = 0; i < search_info.num_shards; i++) {
     char buf[128];
-
+    // orphan.scan.job_name.rados.x
     snprintf(buf, sizeof(buf), "%s.rados.%d", index_objs_prefix.c_str(), i);
     all_objs_index[i] = buf;
 
+    // orphan.scan.job_name.buckets.x
     snprintf(buf, sizeof(buf), "%s.buckets.%d", index_objs_prefix.c_str(), i);
     buckets_instance_index[i] = buf;
 
+    // orphan.linked.job_name.linked.x
     snprintf(buf, sizeof(buf), "%s.linked.%d", index_objs_prefix.c_str(), i);
     linked_objs_index[i] = buf;
   }
@@ -241,6 +248,7 @@ int RGWOrphanSearch::log_oids(map<int, string>& log_shards, map<int, list<string
 
   for (; miter != oids.end(); ++miter) {
     log_iter_info info;
+    // map<int, string> all_objs_index; 用于存储对象key的索引对象map（orphan.scan.job_name.rados.x）
     info.oid = log_shards[miter->first];
     info.cur = miter->second.begin();
     info.end = miter->second.end();
@@ -264,6 +272,7 @@ int RGWOrphanSearch::log_oids(map<int, string>& log_shards, map<int, list<string
          entries[*cur] = bufferlist();
        }
 
+       // 将对应的key保存在索引omap上
        int ret = orphan_store.store_entries(cur_info.oid, entries);
        if (ret < 0) {
          return ret;
@@ -319,6 +328,7 @@ int RGWOrphanSearch::build_all_oids_index()
       continue;
     }
 
+    // head 对象将被跳过
     if (key.ns.empty()) {
       /* skipping head objects, we don't want to remove these as they are mutable and
        * cleaning them up is racy (can race with object removal and a later recreation)
@@ -358,8 +368,10 @@ int RGWOrphanSearch::build_all_oids_index()
 
 int RGWOrphanSearch::build_buckets_instance_index()
 {
+
   void *handle;
   int max = 1000;
+  // 获取所有 deafult.rgw.root pool 里面 .bucket.meta开头的bucket 实例对象
   string section = "bucket.instance";
   int ret = store->meta_mgr->list_keys_init(section, &handle);
   if (ret < 0) {
@@ -391,6 +403,7 @@ int RGWOrphanSearch::build_buckets_instance_index()
       instances[shard].push_back(*iter);
 
       if (++count >= COUNT_BEFORE_FLUSH) {
+        // 将bucket 以omap的形式存储在 orphan.scan.(job_name).buckets.x 对象中
         ret = log_oids(buckets_instance_index, instances);
         if (ret < 0) {
           lderr(store->ctx()) << __func__ << ": ERROR: log_oids() returned ret=" << ret << dendl;
@@ -470,6 +483,7 @@ done:
 int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_id, map<int, list<string> >& oids)
 {
   ldout(store->ctx(), 10) << "building linked oids for bucket instance: " << bucket_instance_id << dendl;
+  // 获取bucket info
   RGWBucketInfo bucket_info;
   RGWObjectCtx obj_ctx(store);
   int ret = store->get_bucket_instance_info(obj_ctx, bucket_instance_id, bucket_info, NULL, NULL);
@@ -570,6 +584,9 @@ int RGWOrphanSearch::build_linked_oids_index()
 
     string oid = iter->second;
 
+    // 1. 第一步从迭代从 buckets_instance_index 索引对象中获取bucket 实例
+    // 2. 以 每次100 个key的形式从获取buckket 对象名，并写入到 linked_objs_index 索引对象omap上
+
     do {
       map<string, bufferlist> entries;
       int ret = orphan_store.read_entries(oid, search_stage.marker, &entries, &truncated);
@@ -669,6 +686,18 @@ int OMAPReader::get_next(string *key, bufferlist *pbl, bool *done)
   return get_next(key, pbl, done);
 }
 
+/*
+ *    link_objs[index]   vs  all_objs[index]
+ *        A             A
+ *        C             B    (leak)
+ *        D             C
+ *        E             D
+ * (head) F             E
+ *        G             G
+ * 通过左右对相同索引下的omap作比较，得出leak对象, link_objs 多出来的head 对象并不会视为leak
+ *
+ * */
+
 int RGWOrphanSearch::compare_oid_indexes()
 {
   assert(linked_objs_index.size() == all_objs_index.size());
@@ -730,6 +759,7 @@ int RGWOrphanSearch::compare_oid_indexes()
         }
         continue;
       }
+      // 这里跳过create时间小于指定天数的对象，目的是为了防止误删，比如像gc尚未回收的
       if (stale_secs && (uint64_t)mtime >= time_threshold) {
         ldout(store->ctx(), 20) << "skipping: " << key << " (mtime=" << mtime << " threshold=" << time_threshold << ")" << dendl;
         continue;
@@ -750,6 +780,7 @@ int RGWOrphanSearch::run()
     
     case ORPHAN_SEARCH_STAGE_INIT:
       ldout(store->ctx(), 0) << __func__ << "(): initializing state" << dendl;
+      // RGWOrphanSearch::init() 已经完成了初始化，所以这里直接修改状态为 ORPHAN_SEARCH_STAGE_LSPOOL 进入下一阶段
       search_stage = RGWOrphanSearchStage(ORPHAN_SEARCH_STAGE_LSPOOL);
       r = save_state();
       if (r < 0) {
@@ -759,6 +790,7 @@ int RGWOrphanSearch::run()
       // fall through
     case ORPHAN_SEARCH_STAGE_LSPOOL:
       ldout(store->ctx(), 0) << __func__ << "(): building index of all objects in pool" << dendl;
+      // 将需要扫描pool的对象全部以omap的形式存储，需要注意的是head object不会写入的，只写入尾对象
       r = build_all_oids_index();
       if (r < 0) {
         lderr(store->ctx()) << __func__ << ": ERROR: build_all_objs_index returned ret=" << r << dendl;
@@ -775,6 +807,8 @@ int RGWOrphanSearch::run()
 
     case ORPHAN_SEARCH_STAGE_LSBUCKETS:
       ldout(store->ctx(), 0) << __func__ << "(): building index of all bucket indexes" << dendl;
+      // 获取所有 deafult.rgw.root pool 里面 .bucket.meta开头的bucket 实例对象
+      // 将bucket 以omap的形式存储在 orphan.scan.(job_name).buckets.x 对象中
       r = build_buckets_instance_index();
       if (r < 0) {
         lderr(store->ctx()) << __func__ << ": ERROR: build_all_objs_index returned ret=" << r << dendl;
@@ -789,9 +823,10 @@ int RGWOrphanSearch::run()
       }
       // fall through
 
-
-    case ORPHAN_SEARCH_STAGE_ITERATE_BI:
+      case ORPHAN_SEARCH_STAGE_ITERATE_BI:
       ldout(store->ctx(), 0) << __func__ << "(): building index of all linked objects" << dendl;
+      // 1. 第一步从迭代从 buckets_instance_index 索引对象中获取bucket 实例
+      // 2. 以 每次100 个key的形式从获取buckket 对象名，并写入到 linked_objs_index 索引对象omap上
       r = build_linked_oids_index();
       if (r < 0) {
         lderr(store->ctx()) << __func__ << ": ERROR: build_all_objs_index returned ret=" << r << dendl;
@@ -807,6 +842,7 @@ int RGWOrphanSearch::run()
       // fall through
 
     case ORPHAN_SEARCH_STAGE_COMPARE:
+      // 对比得出泄露的对象，但是并不删除
       r = compare_oid_indexes();
       if (r < 0) {
         lderr(store->ctx()) << __func__ << ": ERROR: build_all_objs_index returned ret=" << r << dendl;

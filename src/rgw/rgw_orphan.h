@@ -98,6 +98,7 @@ struct RGWOrphanSearchInfo {
 };
 WRITE_CLASS_ENCODER(RGWOrphanSearchInfo)
 
+// 记录当前扫描器的状态
 struct RGWOrphanSearchState {
   RGWOrphanSearchInfo info;
   RGWOrphanSearchStage stage;
@@ -129,6 +130,7 @@ class RGWOrphanStore {
   string oid;
 
 public:
+    // 列表初始oid 为 orphan.index
   explicit RGWOrphanStore(RGWRados *_store) : store(_store), oid(RGW_ORPHAN_INDEX_OID) {}
 
   librados::IoCtx& get_ioctx() { return ioctx; }
@@ -152,9 +154,12 @@ class RGWOrphanSearch {
   RGWOrphanStore orphan_store;
 
   RGWOrphanSearchInfo search_info;
+  // 记录当前进度状态
   RGWOrphanSearchStage search_stage;
 
+  // 用于存储所有的需要扫描的池的所有对象名的索引对象，默认64个，扫描到的对象通过hash的方式存储在
   map<int, string> all_objs_index;
+  // 存储所有bucket
   map<int, string> buckets_instance_index;
   map<int, string> linked_objs_index;
 

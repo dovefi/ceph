@@ -290,6 +290,7 @@ struct RGWMetadataLogHistory {
 WRITE_CLASS_ENCODER(RGWMetadataLogHistory)
 
 class RGWMetadataManager {
+    // handler 是的对应的元数据操作
   map<string, RGWMetadataHandler *> handlers;
   CephContext *cct;
   RGWRados *store;

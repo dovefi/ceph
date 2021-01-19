@@ -6287,6 +6287,7 @@ next:
     }
   }
 
+  // radosgw-admin orphans find
   if (opt_cmd == OPT_ORPHANS_FIND) {
     if (!yes_i_really_mean_it) {
       cerr << "accidental removal of active objects can not be reversed; "
@@ -6294,7 +6295,7 @@ next:
 	   << std::endl;
       return EINVAL;
     }
-
+    // 新建对象泄露扫描器
     RGWOrphanSearch search(store, max_concurrent_ios, orphan_stale_secs);
 
     if (job_id.empty()) {
@@ -6312,11 +6313,14 @@ next:
     info.job_name = job_id;
     info.num_shards = num_shards;
 
+    // 初始化对象泄露查找器
+    // 扫描器所有的中间过程数据都存储在 rgw的log池中
     int ret = search.init(job_id, &info);
     if (ret < 0) {
       cerr << "could not init search, ret=" << ret << std::endl;
       return -ret;
     }
+    // 启动扫描器
     ret = search.run();
     if (ret < 0) {
       return -ret;

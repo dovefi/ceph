@@ -2510,6 +2510,7 @@ public:
 
   RGWAsyncRadosProcessor* get_async_rados() const { return async_rados; };
 
+  // 元数据管理器，专门用于处理元数据池对象操作
   RGWMetadataManager *meta_mgr;
 
   RGWDataChangesLog *data_log;
