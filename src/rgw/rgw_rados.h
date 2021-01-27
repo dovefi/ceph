@@ -363,21 +363,26 @@ WRITE_CLASS_ENCODER(RGWObjManifestPart)
      - head: the head part of the object, which is the part that contains
        the first chunk of data. An object might not have a head (as in the
        case of multipart-part objects).
+       head：整体文件上传的时候会有一个头对象，这个头对象会存储一部分数据，
+       但是multipart的话就只有一个存储元数据信息的头对象，这个对象没有存储数据
      - stripe: data portion of a single rgw object that resides on a single
        rados object.
+       stripe就是每一个底层rados文件的最大大小，默认是4M，具体需要看是ec还是三副本，ec的话有条带对齐的问题
      - part: a collection of stripes that make a contiguous part of an
        object. A regular object will only have one part (although might have
        many stripes), a multipart object might have many parts. Each part
        has a fixed stripe size, although the last stripe of a part might
        be smaller than that. Consecutive parts may be merged if their stripe
        value is the same.
+       part 代表数据分段，像整体上传这样的类型，就只有一个part，因为可以根据头对象规则去获取后续的尾对象
+       但是multipart上传方式因为是，分段的，所以每一个分段都是一个part
 */
 
 struct RGWObjManifestRule {
-  uint32_t start_part_num;
-  uint64_t start_ofs;
-  uint64_t part_size; /* each part size, 0 if there's no part size, meaning it's unlimited */
-  uint64_t stripe_max_size; /* underlying obj max size */
+  uint32_t start_part_num;  // 每一part的开始数字
+  uint64_t start_ofs;       // 这一part 开始的offset
+  uint64_t part_size; /* each part size, 0 if there's no part size, meaning it's unlimited */ // 整体上传的part_size 就是0
+  uint64_t stripe_max_size; /* underlying obj max size */ // 底层rados 对象大小，
   string override_prefix;
 
   RGWObjManifestRule() : start_part_num(0), start_ofs(0), part_size(0), stripe_max_size(0) {}
@@ -411,19 +416,19 @@ WRITE_CLASS_ENCODER(RGWObjManifestRule)
 class RGWObjManifest {
 protected:
   bool explicit_objs; /* old manifest? */
-  map<uint64_t, RGWObjManifestPart> objs;
+  map<uint64_t, RGWObjManifestPart> objs; // 兼容旧版本的manifest暂时没有用到？？？
 
-  uint64_t obj_size;
+  uint64_t obj_size;  // 文件大小
 
   rgw_obj obj;
-  uint64_t head_size;
+  uint64_t head_size; // 头对象大小
   string head_placement_rule;
 
-  uint64_t max_head_size;
+  uint64_t max_head_size; // 头对象最大值
   string prefix;
   rgw_bucket_placement tail_placement; /* might be different than the original bucket,
-                                       as object might have been copied across pools */
-  map<uint64_t, RGWObjManifestRule> rules;
+                                       as object might have been copied across pools */ // 因为数据可能存在拷贝，所以尾对象可以是另外的存储规则
+  map<uint64_t, RGWObjManifestRule> rules;  // 数据存储的规则
 
   string tail_instance; /* tail object's instance */
 
@@ -3964,7 +3969,7 @@ public:
 }; /* RGWPutObjProcessor */
 
 struct put_obj_aio_info {
-  void *handle;
+  void *handle;       // 存储异步回调实例，AioCompletion
   rgw_raw_obj obj;
   uint64_t size;
 };
@@ -3973,13 +3978,13 @@ struct put_obj_aio_info {
 
 class RGWPutObjProcessor_Aio : public RGWPutObjProcessor
 {
-  list<struct put_obj_aio_info> pending;
-  uint64_t window_size{RGW_PUT_OBJ_MIN_WINDOW_SIZE_DEFAULT};
-  uint64_t pending_size{0};
+  list<struct put_obj_aio_info> pending;                        // 异步io任务列表
+  uint64_t window_size{RGW_PUT_OBJ_MIN_WINDOW_SIZE_DEFAULT};    // 缓冲窗口大小，RGW_PUT_OBJ_MIN_WINDOW_SIZE_DEFAULT <= size <= rgw_put_obj_max_window_size
+  uint64_t pending_size{0};                                     // 异步上传任务数据总大小，通过跟window_size 比对决定是否需要等待异步任务
 
-  struct put_obj_aio_info pop_pending();
-  int wait_pending_front();
-  bool pending_has_completed();
+  struct put_obj_aio_info pop_pending();  // 按序将异步任务弹出等待处理
+  int wait_pending_front(); // 等待异步任务完成
+  bool pending_has_completed(); // 异步任务是否完成
 
   rgw_raw_obj last_written_obj;
 
@@ -3987,7 +3992,7 @@ protected:
   uint64_t obj_len{0};
 
   set<rgw_raw_obj> written_objs;
-  rgw_obj head_obj;
+  rgw_obj head_obj; // 写入的头对象，每一次文件上传都会有一个头对象
 
   void add_written_obj(const rgw_raw_obj& obj) {
     written_objs.insert(obj);

@@ -2162,7 +2162,7 @@ int RGWObjManifest::generator::create_begin(CephContext *cct, RGWObjManifest *_m
     string oid_prefix = ".";
     oid_prefix.append(buf);
     oid_prefix.append("_");
-
+    // 设置对象prefix
     manifest->set_prefix(oid_prefix);
   }
 
@@ -2187,6 +2187,7 @@ int RGWObjManifest::generator::create_begin(CephContext *cct, RGWObjManifest *_m
   // Normal object which not generated through copy operation 
   manifest->set_tail_instance(_obj.key.instance);
 
+  // 初始化头尾迭代器
   manifest->update_iterators();
 
   return 0;
@@ -2509,9 +2510,11 @@ int RGWPutObjProcessor_Aio::wait_pending_front()
   if (pending.empty()) {
     return 0;
   }
+  // 获取pending队列队首的的异步任务
   struct put_obj_aio_info info = pop_pending();
   int ret = store->aio_wait(info.handle);
 
+  // 写入失败，重新加入
   if (ret >= 0) {
     add_written_obj(info.obj);
   }
@@ -2539,6 +2542,7 @@ int RGWPutObjProcessor_Aio::drain_pending()
   return ret;
 }
 
+// 控制数据的写入速率
 int RGWPutObjProcessor_Aio::throttle_data(void *handle, const rgw_raw_obj& obj, uint64_t size, bool need_to_wait)
 {
   bool _wait = need_to_wait;
@@ -2554,6 +2558,8 @@ int RGWPutObjProcessor_Aio::throttle_data(void *handle, const rgw_raw_obj& obj, 
   size_t orig_size = pending_size;
 
   /* first drain complete IOs */
+  // 这里使用的是队列存储同个请求的多个写入异步的任务，每次都是通过判断队首的任务
+  // 是否已经完成进行任务的回调结束，保证时序性，保证op按序完成
   while (pending_has_completed()) {
     int r = wait_pending_front();
     if (r < 0)
@@ -2572,7 +2578,9 @@ int RGWPutObjProcessor_Aio::throttle_data(void *handle, const rgw_raw_obj& obj, 
   }
 
   /* now throttle. Note that need_to_wait should only affect the first IO operation */
+  // window_size 就属于缓冲区，如果异步任务的数据太大，就需要等待任务完成
   if (pending_size > window_size || _wait) {
+    // 等待异步任务完成
     int r = wait_pending_front();
     if (r < 0)
       return r;
@@ -2614,6 +2622,7 @@ int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **pha
   uint64_t max_write_size = MIN(max_chunk_size, (uint64_t)next_part_ofs - data_ofs);
 
   pending_data_bl.claim_append(bl);
+  // 一次写入
   if (pending_data_bl.length() < max_write_size) {
     *again = false;
     return 0;
@@ -2649,6 +2658,7 @@ int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **pha
 
 int RGWPutObjProcessor_Atomic::prepare_init(RGWRados *store, string *oid_rand)
 {
+  // 初始化异步调度器，1. 缓冲窗口大小
   RGWPutObjProcessor_Aio::prepare(store, oid_rand);
 
   int r = store->get_max_chunk_size(bucket_info.placement_rule, head_obj, &max_chunk_size);
@@ -2661,19 +2671,23 @@ int RGWPutObjProcessor_Atomic::prepare_init(RGWRados *store, string *oid_rand)
 
 int RGWPutObjProcessor_Atomic::prepare(RGWRados *store, string *oid_rand)
 {
+  // 初始化头对象
   head_obj.init(bucket, obj_str);
-
+  // 初始化最大写入数据 max_chunk_size
   int r = prepare_init(store, oid_rand);
   if (r < 0) {
     return r;
   }
 
+  // 判断是否已经存储多版本id
   if (!version_id.empty()) {
     head_obj.key.set_instance(version_id);
   } else if (versioned_object) {
+    // 不存在随机生成一个id
     store->gen_rand_obj_instance_name(&head_obj);
   }
 
+  // 设置manifest 信息
   manifest.set_trivial_rule(max_chunk_size, store->ctx()->_conf->rgw_obj_stripe_size);
 
   r = manifest_gen.create_begin(store->ctx(), &manifest, bucket_info.placement_rule, head_obj.bucket, head_obj);

@@ -2117,9 +2117,11 @@ void RGWSetBucketVersioning::execute()
 
   op_ret = retry_raced_bucket_write(store, s, [this] {
       if (enable_versioning) {
+        // 此时状态为 0x2 = 00000010
 	s->bucket_info.flags |= BUCKET_VERSIONED;
 	s->bucket_info.flags &= ~BUCKET_VERSIONS_SUSPENDED;
       } else {
+        // 此时状态为 0x6 = 00000110, 表示曾经开启过，现在关闭
 	s->bucket_info.flags |= (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED);
       }
 
@@ -3170,6 +3172,7 @@ RGWPutObjProcessor *RGWPutObj::select_processor(RGWObjectCtx& obj_ctx, bool *is_
   uint64_t part_size = s->cct->_conf->rgw_obj_stripe_size;
 
   if (!multipart) {
+    //
     processor = new RGWPutObjProcessor_Atomic(obj_ctx, s->bucket_info, s->bucket, s->object.name, part_size, s->req_id, s->bucket_info.versioning_enabled());
     (static_cast<RGWPutObjProcessor_Atomic *>(processor))->set_olh_epoch(olh_epoch);
     (static_cast<RGWPutObjProcessor_Atomic *>(processor))->set_version_id(version_id);
@@ -3312,9 +3315,12 @@ static CompressorRef get_compressor_plugin(const req_state *s,
 
 void RGWPutObj::execute()
 {
+  // filter用于对数据进行处理，比如加密和压缩
   RGWPutObjProcessor *processor = NULL;
   RGWPutObjDataProcessor *filter = nullptr;
   std::unique_ptr<RGWPutObjDataProcessor> encrypt;
+
+  // 用于存储用户提供的md5、计算的md5 相关的数组
   char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
   char supplied_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
@@ -3324,9 +3330,11 @@ void RGWPutObj::execute()
   int len;
   map<string, string>::iterator iter;
   bool multipart;
-  
+
+  // copy source range 相关
   off_t fst;
   off_t lst;
+  // 根据zone配置选择object的压缩类型，可为none或具体的压缩插件名字
   const auto& compression_type = store->get_zone_params().get_compression_type(
       s->bucket_info.placement_rule);
   CompressorRef plugin;
@@ -3344,6 +3352,7 @@ void RGWPutObj::execute()
     return;
   }
 
+  // 解析并判断http请求的相关参数，包括copy obj的情况、包含tagging的情况、包含version的情况，以及基本的objname和bucketname解析
   op_ret = get_params();
   if (op_ret < 0) {
     ldout(s->cct, 20) << "get_params() returned ret=" << op_ret << dendl;
@@ -3357,6 +3366,7 @@ void RGWPutObj::execute()
     goto done;
   }
 
+  // 判断并处理请求是否提供了md5来校验请求完整
   if (supplied_md5_b64) {
     need_calc_md5 = true;
 
@@ -3373,14 +3383,18 @@ void RGWPutObj::execute()
     ldout(s->cct, 15) << "supplied_md5=" << supplied_md5 << dendl;
   }
 
+  // 判断http传输是否使用了chunk传输的方式，如果没有，可以直接根据content length来判断quota，否则需要等到所有chunk接收完成
   if (!chunked_upload) { /* with chunked upload we don't know how big is the upload.
                             we also check sizes at the end anyway */
+    // 检测quota
     op_ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
 				user_quota, bucket_quota, s->content_length);
     if (op_ret < 0) {
       ldout(s->cct, 20) << "check_quota() returned ret=" << op_ret << dendl;
       goto done;
     }
+
+    // 检测是否需要做bucket动态分片
     op_ret = store->check_bucket_shards(s->bucket_info, s->bucket, bucket_quota);
     if (op_ret < 0) {
       ldout(s->cct, 20) << "check_bucket_shards() returned ret=" << op_ret << dendl;
@@ -3393,6 +3407,7 @@ void RGWPutObj::execute()
     supplied_md5[sizeof(supplied_md5) - 1] = '\0';
   }
 
+  // 选择合适的上传处理器
   processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx), &multipart);
 
   // no filters by default
@@ -3496,7 +3511,7 @@ void RGWPutObj::execute()
     if (need_to_wait) {
       orig_data = data;
     }
-
+    // 写入数据并限流
     op_ret = put_data_and_throttle(filter, data, ofs, need_to_wait);
     if (op_ret < 0) {
       if (op_ret != -EEXIST) {

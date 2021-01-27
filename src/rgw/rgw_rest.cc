@@ -2324,6 +2324,7 @@ RGWHandler_REST* RGWREST::get_handler(
     *init_error = -ERR_METHOD_NOT_ALLOWED;
     return NULL;
   }
+  // 初始化handler，包括bucket，对象 等信息
   *init_error = handler->init(store, s, rio);
   if (*init_error < 0) {
     m->put_handler(handler);

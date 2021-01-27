@@ -1172,10 +1172,10 @@ struct RGWObjVersionTracker {
 };
 
 enum RGWBucketFlags {
-  BUCKET_SUSPENDED = 0x1,
-  BUCKET_VERSIONED = 0x2,
-  BUCKET_VERSIONS_SUSPENDED = 0x4,
-  BUCKET_DATASYNC_DISABLED = 0X8,
+  BUCKET_SUSPENDED = 0x1,           // bucket 暂停
+  BUCKET_VERSIONED = 0x2,           // bucket 多版本开启
+  BUCKET_VERSIONS_SUSPENDED = 0x4,  // bucket 多版本暂停
+  BUCKET_DATASYNC_DISABLED = 0X8,   // bucket 开始数据同步
 };
 
 enum RGWBucketIndexType {

@@ -82,7 +82,7 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   }
 
   req->log(s, "verifying op permissions");
-  // 验证操作权限
+  // 验证操作权限，
   ret = op->verify_permission();
   if (ret < 0) {
     if (s->system_request) {
@@ -221,7 +221,7 @@ int process_request(RGWRados* const store,
     goto done;
   }
 
-  // 处理权限
+  // 处理权限，并开始执行操作
   ret = rgw_process_authenticated(handler, op, req, s);
   if (ret < 0) {
     abort_early(s, op, ret, handler);
