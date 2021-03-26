@@ -811,6 +811,7 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
 #endif
 
   c->io = this;
+  // 将aio 请求加入到队列中
   queue_aio_write(c);
 
   ZTracer::Trace trace;

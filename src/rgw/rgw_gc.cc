@@ -57,6 +57,7 @@ void RGWGC::add_chain(ObjectWriteOperation& op, cls_rgw_obj_chain& chain, const 
 
 int RGWGC::send_chain(cls_rgw_obj_chain& chain, const string& tag, bool sync)
 {
+
   ObjectWriteOperation op;
   add_chain(op, chain, tag);
 
@@ -145,6 +146,7 @@ int RGWGC::process(int index, int max_secs)
   utime_t time(max_secs, 0);
   l.set_duration(time);
 
+  // 申请一个独占锁，每个index 对应一个，所以其实可以并发的执行
   int ret = l.lock_exclusive(&store->gc_pool_ctx, obj_names[index]);
   if (ret == -EBUSY) { /* already locked by another gc processor */
     dout(10) << "RGWGC::process() failed to acquire lock on " << obj_names[index] << dendl;

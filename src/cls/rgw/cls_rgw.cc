@@ -3201,6 +3201,12 @@ static bool key_in_index(const string& key, int index_type)
 static int gc_update_entry(cls_method_context_t hctx, uint32_t expiration_secs,
                            cls_rgw_gc_obj_info& info)
 {
+  // for dovefi debug
+  CLS_LOG(1, "dovefi: gc_update_entry start\n");
+  for (auto i = info.chain.objs.begin(); i != info.chain.objs.end(); ++i) {
+    CLS_LOG(2, "dovefi: gc_update_entry chain objs info  %s \n", i->key.name.c_str());
+  }
+
   cls_rgw_gc_obj_info old_info;
   int ret = gc_omap_get(hctx, GC_OBJ_NAME_INDEX, info.tag, &old_info);
   if (ret == 0) {
@@ -3215,8 +3221,10 @@ static int gc_update_entry(cls_method_context_t hctx, uint32_t expiration_secs,
   info.time = ceph::real_clock::now();
   info.time += make_timespan(expiration_secs);
   ret = gc_omap_set(hctx, GC_OBJ_NAME_INDEX, info.tag, &info);
-  if (ret < 0)
+  if (ret < 0) {
+    CLS_LOG(0, "dovefi: ERROR: gc_omap_set GC_OBJ_NAME_INDEX fail");
     return ret;
+  }
 
   string key;
   get_time_key(info.time, &key);
@@ -3266,6 +3274,8 @@ static int rgw_cls_gc_set_entry(cls_method_context_t hctx, bufferlist *in, buffe
     CLS_LOG(1, "ERROR: rgw_cls_gc_set_entry(): failed to decode entry\n");
     return -EINVAL;
   }
+  CLS_LOG(1, "dovefi: rgw_cls_gc_set_entry decode success\n");
+  CLS_LOG(1, "dovefi: step2: gc_update_entry");
 
   return gc_update_entry(hctx, op.expiration_secs, op.info);
 }
