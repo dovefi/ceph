@@ -301,6 +301,7 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
   }
 
   // caches
+  // 这个参数跟 bluestore cache size中的kv size 冲突
   if (!set_cache_flag) {
     cache_size = g_conf->rocksdb_cache_size;
   }

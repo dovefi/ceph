@@ -3957,6 +3957,9 @@ void BlueStore::_set_finisher_num()
   assert(m_finisher_num != 0);
 }
 
+// 设置整个bluestore引擎的cache 
+// 包括bluestore meta，kv，data
+// 其中kv指的是rocksdb_cache_size
 int BlueStore::_set_cache_sizes()
 {
   assert(bdev);
@@ -3972,7 +3975,8 @@ int BlueStore::_set_cache_sizes()
   osd_memory_cache_min = cct->_conf->get_val<uint64_t>("osd_memory_cache_min");
   osd_memory_cache_resize_interval = 
       cct->_conf->get_val<double>("osd_memory_cache_resize_interval");
-
+  // 如果bluestore_cache_size == 0
+  // 那么就会使用对应的磁盘类型的cache size
   if (cct->_conf->bluestore_cache_size) {
     cache_size = cct->_conf->bluestore_cache_size;
   } else {
@@ -4996,6 +5000,7 @@ int BlueStore::_open_db(bool create)
 
   FreelistManager::setup_merge_operators(db);
   db->set_merge_operator(PREFIX_STAT, merge_op);
+  // 此处设置rocksdb cache size
   db->set_cache_size(cache_kv_ratio * cache_size);
 
   if (kv_backend == "rocksdb")
