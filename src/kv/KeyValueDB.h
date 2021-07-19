@@ -18,7 +18,7 @@
 using std::string;
 /**
  * Defines virtual interface to be implemented by key value store
- *
+ * 定义数据库kv store 的接口，所有的实现都必须继承
  * Kyoto Cabinet or LevelDB should implement this
  */
 class KeyValueDB : public PriorityCache::PriCache {

@@ -25,7 +25,7 @@ class SequencerPosition;
 
 /**
  * Encapsulates the FileStore key value store
- *
+ * 这里是封装了filestore的kv 存储的接口，filestore 的DBObjectMap 继承实现了此虚类
  * Implementations of this interface will be used to implement TMAP
  */
 class ObjectMap {

@@ -65,6 +65,8 @@ typedef uint32_t osflagbits_t;
 const int SKIP_JOURNAL_REPLAY = 1 << 0;
 const int SKIP_MOUNT_OMAP = 1 << 1;
 
+// ObjectStore 定义了对象存储的接口，对上层应用定义可操作性的api
+// filestore 和 bluestore都必须继承实现
 class ObjectStore {
 protected:
   string path;
@@ -357,6 +359,7 @@ public:
    * A and B.
    *
    */
+  // 对objectStore 的所有操作都会封装为一个事物操作。目的是保证操作的ACID
   class Transaction {
   public:
     enum {
